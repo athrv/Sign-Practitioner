@@ -7,12 +7,13 @@ import PIL.Image, PIL.ImageDraw
 import cv2 as cv
 import tkinter.messagebox
 from tkinter import *
-from tkinter import simpledialog
+from tkinter import simpledialog, filedialog
 from sklearn.svm import LinearSVC
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 
 class DrawingClassifier:
     def __init__(self):
@@ -49,9 +50,9 @@ class DrawingClassifier:
             self.clf=data['clf']
             self.proj_name=data['pname']
         else:
-            self.class1=simpledialog.askstring("Class 1", "What is the first class called?", parent=msg)
-            self.class2=simpledialog.askstring("Class 2", "What is the second class called?", parent=msg)
-            self.class3=simpledialog.askstring("Class 3", "What is the third class called?", parent=msg)
+            self.class1=simpledialog.askstring("Class 1", "Name the first person?", parent=msg)
+            self.class2=simpledialog.askstring("Class 2", "Name the second person", parent=msg)
+            self.class3=simpledialog.askstring("Class 3", "Name the third person", parent=msg)
             
             self.class1_counter=1
             self.class2_counter=1
@@ -59,7 +60,6 @@ class DrawingClassifier:
         
             self.clf=LinearSVC()
             
-            os.chdir("Sign detection")
             os.mkdir(self.proj_name)
             os.chdir(self.proj_name)
             os.mkdir(self.class1)
@@ -73,7 +73,7 @@ class DrawingClassifier:
         WHITE=(255, 255, 255)
         
         self.root=Tk()
-        self.root.title(f"NeuralNine Drawing Classifier - {self.proj_name}")
+        self.root.title(f"Sign Verification - {self.proj_name}")
         self.canvas=Canvas(self.root, width=WIDTH-10, height=HEIGHT-10, bg="white")
         self.canvas.pack(expand=YES, fill=BOTH)
         self.canvas.bind("<B1-Motion>", self.paint)
@@ -133,7 +133,7 @@ class DrawingClassifier:
         x1, y1=(event.x-1), (event.y-1)
         x2, y2=(event.x+1), (event.y+1)
         self.canvas.create_rectangle(x1, y1, x2, y2, fill="black", width=self.brush_width)
-        self.draw.rectangle(x1, y1, x2+self.brush_width, y2+self.brush_width, fill="black", width=self.brush_width) 
+        self.draw.rectangle([x1, y1, x2+self.brush_width, y2+self.brush_width], fill="black", width=self.brush_width) 
     
     def save(self, class_num):
         self.image1.save("temp.png")
@@ -164,25 +164,91 @@ class DrawingClassifier:
         self.draw.rectangle([0, 0, 1000, 1000], fill="white")
     
     def train_model(self):
-        pass
+        img_list=np.array([])
+        class_list=np.array([])
+        
+        for x in range(1, self.class1_counter):
+            img=cv.imread(f"{self.proj_name}/{self.class1}/{x}.png")[:, :, 0]
+            img=img.reshape(2500)
+            img_list=np.append(img_list, [img])
+            class_list=np.append(class_list, 1)
+            
+        for x in range(1, self.class2_counter):
+            img=cv.imread(f"{self.proj_name}/{self.class2}/{x}.png")[:, :, 0]
+            img=img.reshape(2500)
+            img_list=np.append(img_list, [img])
+            class_list=np.append(class_list, 2)
+            
+        for x in range(1, self.class3_counter):
+            img=cv.imread(f"{self.proj_name}/{self.class3}/{x}.png")[:, :, 0]
+            img=img.reshape(2500)
+            img_list=np.append(img_list, [img])
+            class_list=np.append(class_list, 3)
+            
+        img_list=img_list.reshape(self.class1_counter-1+self.class2_counter-1+self.class3_counter-1, 2500)
+        self.clf.fit(img_list, class_list)
+        tkinter.messagebox.showinfo("Sign Verification", "Model Successfully traied", parent=self.root)
+        
     
     def predict(self):
-        pass
+        self.image1.save("temp.png")
+        img=PIL.Image.open("temp.png")
+        img.thumbnail((50, 50), PIL.Image.ANTIALIAS)
+        img.save("predictshape.png", "PNG")
+        
+        img=cv.imread("predictshape.png")[:, :, 0]
+        img=img.reshape(2500)
+        prediction=self.clf.predict([img])
+        if prediction[0]==1:
+            tkinter.messagebox.showinfo("Sign Verification", f"{self.class1}'s sign verified", parent=self.root)
+        elif prediction[0]==2:
+            tkinter.messagebox.showinfo("Sign Verification", f"{self.class2}'s sign verified", parent=self.root)
+        elif prediction[0]==3:
+            tkinter.messagebox.showinfo("Sign Verification", f"{self.class3}'s sign verified", parent=self.root)  
+        
     
     def rotate_model(self):
-        pass
+        if isinstance(self.clf, LinearSVC):
+            self.clf=KNeighborsClassifier()
+        elif isinstance(self.clf, KNeighborsClassifier):
+            self.clf=LogisticRegression()
+        elif isinstance(self.clf, LogisticRegression):
+            self.clf=DecisionTreeClassifier()
+        elif isinstance(self.clf, DecisionTreeClassifier):
+            self.clf=RandomForestClassifier()
+        elif isinstance(self.clf, RandomForestClassifier):
+            self.clf=GaussianNB()
+        elif isinstance(self.clf, GaussianNB):
+            self.clf=LinearSVC()
+        
+        self.status_label.config(text=f"Current Model: {type(self.clf).__name__}")
+        
     
     def save_model(self):
-        pass
+        file_path=filedialog.asksaveasfilename(defaultextension="pickle")
+        with open(file_path, "wb") as f:
+            pickle.dump(self.clf, f)
+        tkinter.messagebox.showinfo("Sign Verification", "Model successfully saved!", parent=self.root)
     
     def load_model(self):
-        pass
+        file_path=filedialog.askopenfilename()
+        with open(file_path, "rb") as f:
+            self.clf=pickle.load(f)
+        tkinter.messagebox.showinfo("Sign Verification", "Model successfully loaded!", parent=self.root)
+        
     
     def save_everything(self):
-        pass
+        data={"c1":self.class1, "c2":self.class2, "c3":self.class3, "c1c":self.class1_counter, "c2c":self.class2_counter, "c3c":self.class3_counter, "clf":self.clf, "pname":self.proj_name}
+        with open(f"{self.proj_name}/{self.proj_name}_data.pickle", "wb") as f:
+            pickle.dump(data, f)
+        tkinter.messagebox.showinfo("Sign Verification", "Project successfully saved!", parent=self.root)
     
     def on_closing(self):
-        pass
+        answer=tkinter.messagebox.askyesno("Quit", "Do you want to save your work?", parent=self.root)
+        if answer:
+            self.save_everything()
+        self.root.destroy()
+        exit()    
     
     
 DrawingClassifier()
